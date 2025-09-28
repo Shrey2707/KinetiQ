@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html class="scroll-smooth" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>KinetiQ - Mudra Identifier</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Lora:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body { background-image: url('https://www.transparenttextures.com/patterns/beige-paper.png'); }
+    </style>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: { '500': '#800000', '600': '#660000' }, accent: '#D4AF37', background: '#FDF5E6',
+                        surface: '#FFFCF5', textPrimary: '#4A2B1A', textSecondary: '#7A5C4F',
+                        backgroundDark: '#2C1B12', surfaceDark: '#4A2B1A', textPrimaryDark: '#FDF5E6', textSecondaryDark: '#BFAE99',
+                    },
+                    fontFamily: { display: ['Playfair Display', 'serif'], body: ['Lora', 'serif'] },
+                },
+            },
+        };
+    </script>
+</head>
+
+<body class="bg-background dark:bg-backgroundDark font-body text-textPrimary dark:text-textPrimaryDark transition-colors duration-300">
+<div class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md bg-surface dark:bg-surfaceDark rounded-xl shadow-2xl p-8 space-y-6 border border-black/10 dark:border-white/10">
+        <div class="text-center">
+            <p class="font-display text-lg text-accent">KinetiQ</p>
+            <h1 class="text-4xl font-display font-bold text-primary dark:text-accent mt-1">Mudra Identifier</h1>
+            <p class="text-textSecondary dark:text-textSecondaryDark mt-2">Unveil the language of classical dance.</p>
+        </div>
+        <div id="result-view" class="hidden text-center space-y-4">
+            <h2 class="text-2xl font-body font-semibold text-textPrimary dark:text-textPrimaryDark">Identified Mudra:</h2>
+            <p class="text-4xl font-display font-bold text-primary-500 dark:text-accent" id="result-text"></p>
+            <img id="result-image" class="w-full h-64 object-contain rounded-lg border-2 border-primary-500/50 dark:border-accent/50"/>
+            <button id="reset-btn" class="w-full py-3 px-4 bg-gray-500 text-white font-semibold rounded-lg hover:bg-gray-600 transition">Analyze Another Image</button>
+        </div>
+        <div id="input-view" class="space-y-4">
+            <div id="display-area" class="relative w-full h-64 bg-background dark:bg-backgroundDark rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600">
+                <p id="display-placeholder" class="text-textSecondary dark:text-textSecondaryDark">Image preview will appear here</p>
+                <video id="camera-stream" autoplay playsinline class="hidden w-full h-full object-contain rounded-lg"></video>
+                <img id="image-preview" class="hidden w-full h-full object-contain rounded-lg"/>
+                <div id="live-result" class="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xl font-bold p-2 rounded hidden"></div>
+            </div>
+            <div id="initial-buttons" class="grid grid-cols-2 gap-4">
+                <button id="upload-btn" class="w-full py-3 px-4 bg-primary-500 text-white font-semibold rounded-lg hover:bg-primary-600 transition">Upload Image</button>
+                <input type="file" id="file-input" accept="image/*" class="hidden"/>
+                <button id="camera-btn" class="w-full py-3 px-4 bg-gray-200 dark:bg-slate-700 text-textPrimary dark:text-textPrimaryDark font-semibold rounded-lg hover:bg-gray-300 transition">Use Camera</button>
+            </div>
+            <div id="camera-actions" class="hidden grid grid-cols-2 gap-4">
+                 <button id="capture-btn" class="w-full py-3 px-4 bg-primary-500 text-white font-semibold rounded-lg hover:bg-primary-600 transition">Capture Photo</button>
+                 <button id="real-time-btn" class="w-full py-3 px-4 bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition">Start Live Tracking</button>
+            </div>
+            <div id="action-buttons" class="hidden grid grid-cols-1 gap-4">
+                 <button id="predict-btn" class="w-full py-3 px-4 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition">Identify Mudra</button>
+                 <button id="cancel-btn" class="w-full py-2 px-4 bg-gray-500 text-white font-semibold rounded-lg hover:bg-gray-600 transition text-sm">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+<script>
+    // --- ELEMENT SELECTORS ---
+    const inputView = document.getElementById('input-view');
+    const resultView = document.getElementById('result-view');
+    const displayPlaceholder = document.getElementById('display-placeholder');
+    const video = document.getElementById('camera-stream');
+    const imagePreview = document.getElementById('image-preview');
+    const initialButtons = document.getElementById('initial-buttons');
+    const cameraActions = document.getElementById('camera-actions');
+    const actionButtons = document.getElementById('action-buttons');
+    const uploadBtn = document.getElementById('upload-btn');
+    const fileInput = document.getElementById('file-input');
+    const cameraBtn = document.getElementById('camera-btn');
+    const captureBtn = document.getElementById('capture-btn');
+    const realTimeBtn = document.getElementById('real-time-btn');
+    const predictBtn = document.getElementById('predict-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
+    const resultText = document.getElementById('result-text');
+    const resultImage = document.getElementById('result-image');
+    const resetBtn = document.getElementById('reset-btn');
+    const liveResult = document.getElementById('live-result');
+
+    let cameraStream;
+    let liveTrackingInterval;
+    
+    // --- SOCKET.IO SETUP (for live tracking) ---
+    const socket = io();
+    socket.on('live_prediction', (data) => {
+        liveResult.textContent = `Mudra: ${data.mudra}`;
+    });
+
+    // --- UI STATE MANAGEMENT ---
+    const updateUI = (state, data = {}) => {
+        inputView.classList.add('hidden');
+        resultView.classList.add('hidden');
+        video.classList.add('hidden');
+        imagePreview.classList.add('hidden');
+        initialButtons.classList.add('hidden');
+        cameraActions.classList.add('hidden');
+        actionButtons.classList.add('hidden');
+        displayPlaceholder.classList.remove('hidden');
+        liveResult.classList.add('hidden');
+        if (liveTrackingInterval) {
+            clearInterval(liveTrackingInterval);
+            liveTrackingInterval = null;
+            realTimeBtn.textContent = "Start Live Tracking";
+            realTimeBtn.classList.replace("bg-red-600", "bg-teal-600");
+        }
+
+        if (state === 'initial') {
+            inputView.classList.remove('hidden');
+            initialButtons.classList.remove('hidden');
+            if (cameraStream) cameraStream.getTracks().forEach(track => track.stop());
+        } else if (state === 'camera') {
+            inputView.classList.remove('hidden');
+            cameraActions.classList.remove('hidden');
+            video.classList.remove('hidden');
+            displayPlaceholder.classList.add('hidden');
+        } else if (state === 'image_ready') {
+            inputView.classList.remove('hidden');
+            actionButtons.classList.remove('hidden');
+            imagePreview.src = data.imageUrl;
+            imagePreview.classList.remove('hidden');
+            displayPlaceholder.classList.add('hidden');
+        } else if (state === 'loading') {
+            resultView.classList.remove('hidden');
+            resultText.textContent = 'Analyzing...';
+            resultImage.src = data.imageUrl;
+        } else if (state === 'result') {
+            resultView.classList.remove('hidden');
+            resultText.textContent = data.mudra;
+            resultImage.src = data.imageUrl;
+        }
+    };
+
+    // --- EVENT LISTENERS ---
+    uploadBtn.addEventListener('click', () => fileInput.click());
+    cancelBtn.addEventListener('click', () => updateUI('initial'));
+    resetBtn.addEventListener('click', () => updateUI('initial'));
+    
+    cameraBtn.addEventListener('click', async () => {
+        try {
+            cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = cameraStream;
+            updateUI('camera');
+        } catch (err) { alert("Camera access denied."); }
+    });
+    
+    fileInput.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => updateUI('image_ready', { imageUrl: e.target.result });
+            reader.readAsDataURL(file);
+        }
+    });
+
+    captureBtn.addEventListener('click', () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+        updateUI('image_ready', { imageUrl: canvas.toDataURL('image/jpeg') });
+        if (cameraStream) cameraStream.getTracks().forEach(track => track.stop());
+    });
+
+    // --- LIVE TRACKING LOGIC ---
+    realTimeBtn.addEventListener("click", () => {
+        if (liveTrackingInterval) {
+            clearInterval(liveTrackingInterval);
+            liveTrackingInterval = null;
+            liveResult.classList.add("hidden");
+            realTimeBtn.textContent = "Start Live Tracking";
+            realTimeBtn.classList.replace("bg-red-600", "bg-teal-600");
+        } else {
+            liveResult.classList.remove("hidden");
+            realTimeBtn.textContent = "Stop Live Tracking";
+            realTimeBtn.classList.replace("bg-teal-600", "bg-red-600");
+            liveTrackingInterval = setInterval(() => {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+                socket.emit('live_frame', canvas.toDataURL('image/jpeg', 0.8));
+            }, 100);
+        }
+    });
+    
+    // --- SINGLE IMAGE SUBMISSION ---
+    predictBtn.addEventListener('click', async () => {
+        let imageData = imagePreview.src;
+        if (!imageData) return;
+        updateUI('loading', { imageUrl: imageData });
+        try {
+            const response = await fetch('/predict', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: imageData }),
+            });
+            const result = await response.json();
+            updateUI('result', { mudra: result.mudra || result.error || "Could not identify", imageUrl: imageData });
+        } catch (error) {
+            updateUI('result', { mudra: 'Server error', imageUrl: imageData });
+        }
+    });
+
+    updateUI('initial');
+</script>
+</body>
+</html>
